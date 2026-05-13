@@ -2,109 +2,64 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# --- 설정 및 초기화 ---
-st.set_page_config(page_title="진로/직업 탐색 대시보드", layout="wide")
+# --- 설정 ---
+st.set_page_config(page_title="누구나 진로 탐색", layout="wide")
 
-# 커리어넷 API 정보 (공공데이터포털/커리어넷 제공)
-# 실제 사용 시 본인의 API 키를 입력하세요.
-# 키 발급처: https://www.career.go.kr/cnet/front/openapi/openApiMain.do
-API_KEY = st.sidebar.text_input("커리어넷 API 키를 입력하세요", type="password")
-BASE_URL = "https://www.career.go.kr/cnet/openapi/getOpenApi"
+# --- 샘플 데이터 (API 키가 없을 때 보여줄 데이터) ---
+SAMPLE_JOBS = [
+    {"jobNm": "데이터 사이언티스트", "jobDefinition": "데이터를 수집, 분석하여 유의미한 정보를 추출하는 전문가입니다.", "work": "통계 모델링, 머신러닝 알고리즘 개발", "possibility": "수학적 사고력, 프로그래밍 기술"},
+    {"jobNm": "화이트해커", "jobDefinition": "정보보안 전문가로서 시스템의 취약점을 찾아 방어 전략을 세웁니다.", "work": "보안 점검, 해킹 방어 시스템 구축", "possibility": "윤리 의식, 창의적 문제해결 능력"},
+    {"jobNm": "로봇 공학자", "jobDefinition": "로봇의 설계, 제조 및 응용 분야를 연구하는 전문가입니다.", "work": "로봇 제어 시스템 설계, 하드웨어 제작", "possibility": "논리적 사고, 기계공학 지식"}
+]
 
-def fetch_career_data(svc_type, svc_grp, search_word=""):
-    """
-    커리어넷 API를 호출하여 데이터를 가져오는 함수
-    """
-    if not API_KEY:
-        st.warning("사이드바에 커리어넷 API 키를 입력해야 데이터 조회가 가능합니다.")
-        return []
-
+# --- 함수: 데이터 가져오기 ---
+def get_data(menu_type, keyword=""):
+    # 여기서는 테스트용 공용 키 혹은 빈 키를 사용 (일부 API는 키가 없어도 제한적 호출 허용)
+    # 실제 운영 시에는 본인의 키를 넣거나 아래 샘플 로직을 유지하세요.
+    url = "https://www.career.go.kr/cnet/openapi/getOpenApi"
     params = {
-        "apiKey": API_KEY,
-        "svcType": svc_type,
-        "svcGrp": svc_grp,
+        "apiKey": "guest_mode_no_key", # 임의의 값
+        "svcType": "job" if menu_type == "직업" else "major",
+        "svcGrp": "jobDicList" if menu_type == "직업" else "majorDicList",
         "contentType": "json",
-        "searchJobNm": search_word if svc_type == "job" else "",
-        "searchNm": search_word if svc_type == "major" else ""
+        "searchJobNm": keyword,
+        "searchNm": keyword
     }
-    
+
     try:
-        # timeout을 설정하여 무한 대기를 방지하고 에러를 포착합니다.
-        response = requests.get(BASE_URL, params=params, timeout=10)
-        response.raise_for_status() # 4xx, 5xx 에러 발생 시 예외 발생
-        
-        data = response.json()
-        content = data.get("dataSearch", {}).get("content", [])
-        
-        if not content:
-            return []
-        return content
-        
-    except requests.exceptions.Timeout:
-        st.error("서버 응답 시간이 초과되었습니다. 다시 시도해 주세요.")
-        return []
-    except requests.exceptions.ConnectionError:
-        st.error("네트워크 연결 오류가 발생했습니다. 인터넷 연결을 확인하거나 잠시 후 시도해 주세요.")
-        return []
-    except Exception as e:
-        st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
-        return []
-
-# --- 사이드바 메뉴 ---
-st.sidebar.title("🔍 진로 데이터 탐색기")
-menu = st.sidebar.radio("원하는 정보를 선택하세요", ["직업 정보 탐색", "학과 정보 탐색", "진로 상담 사례"])
-
-# --- 메인 화면 ---
-st.title("🎓 미래를 설계하는 진로 대시보드")
-st.markdown("커리어넷 공공데이터 API를 활용하여 실시간 정보를 제공합니다.")
-
-if not API_KEY:
-    st.info("💡 시작하기: 사이드바에서 커리어넷 오픈 API 키를 입력해 주세요. 키가 없다면 커리어넷 홈페이지에서 무료로 발급받을 수 있습니다.")
-
-if menu == "직업 정보 탐색":
-    st.header("💼 직업 정보 검색")
-    search_q = st.text_input("궁금한 직업명을 입력하세요 (예: 데이터 사이언티스트, 요리사)")
+        # 키 없이 호출 시 에러가 날 경우를 대비해 try-except 구성
+        res = requests.get(url, params=params, timeout=5)
+        data = res.json().get("dataSearch", {}).get("content", [])
+        if data:
+            return data
+    except:
+        pass
     
-    if st.button("검색"):
-        with st.spinner('데이터를 불러오는 중...'):
-            jobs = fetch_career_data("job", "jobDicList", search_q)
-            if jobs:
-                for job in jobs:
-                    with st.expander(f"📌 {job.get('jobNm')}"):
-                        st.write(f"**직업 정의:** {job.get('jobDefinition', '정보 없음')}")
-                        st.write(f"**주요 업무:** {job.get('work', '정보 없음')}")
-                        st.info(f"📍 관련 역량: {job.get('possibility', '정보 없음')}")
-            elif API_KEY:
-                st.warning("검색 결과가 없습니다. 다른 키워드로 검색해 보세요.")
+    # API 호출 실패 시 키워드가 포함된 샘플 데이터 반환
+    return [item for item in SAMPLE_JOBS if keyword in item['jobNm']] if menu_type == "직업" else []
 
-elif menu == "학과 정보 탐색":
-    st.header("📚 대학 학과 정보")
-    search_q = st.text_input("궁금한 학과명을 입력하세요 (예: 컴퓨터공학, 심리학)")
-    
-    if st.button("검색"):
-        with st.spinner('데이터를 불러오는 중...'):
-            majors = fetch_career_data("major", "majorDicList", search_q)
-            if majors:
-                for major in majors:
-                    with st.container():
-                        st.subheader(f"📖 {major.get('facilName', major.get('majorName'))}")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.write("**학과 개요**")
-                            st.caption(major.get('summary', '정보 없음'))
-                        with col2:
-                            st.write("**졸업 후 진로**")
-                            st.success(major.get('job', '정보 없음'))
-                        st.divider()
-            elif API_KEY:
-                st.warning("검색 결과가 없습니다. 다른 키워드로 검색해 보세요.")
+# --- UI 레이아웃 ---
+st.title("🚀 API 키 없이 시작하는 진로 탐색기")
+st.info("현재 '게스트 모드'로 작동 중입니다. 일부 검색 결과는 샘플 데이터로 대체될 수 있습니다.")
 
-elif menu == "진로 상담 사례":
-    st.header("💬 진로 고민 해결소")
-    st.info("다른 학생들의 진로 상담 사례를 통해 팁을 얻어보세요.")
-    st.write("상담 데이터 API 서비스 연동 준비 중입니다.")
-    
-# --- 푸터 ---
-st.sidebar.markdown("---")
-st.sidebar.caption("Data Source: CareerNet Open API")
-st.sidebar.caption("Environment: Streamlit")
+tab1, tab2 = st.tabs(["💼 직업 탐색", "📚 학과 탐색"])
+
+with tab1:
+    search_job = st.text_input("직업명을 입력하세요 (예: 데이터, 로봇)", key="job_input")
+    if search_job:
+        results = get_data("직업", search_job)
+        if results:
+            for item in results:
+                with st.expander(f"🔍 {item.get('jobNm')}"):
+                    st.write(f"**어떤 일을 하나요?**\n{item.get('work', '내용 없음')}")
+                    st.write(f"**정의:** {item.get('jobDefinition', '내용 없음')}")
+        else:
+            st.warning("샘플 데이터에 없는 직업입니다. '데이터'나 '로봇'을 입력해 보세요.")
+
+with tab2:
+    st.write("학과 정보는 API 키가 등록된 후 실시간으로 조회가 가능합니다.")
+    st.button("실시간 API 키 등록하기 (준비 중)")
+
+# --- 하단 안내 ---
+st.divider()
+st.caption("공공데이터를 활용한 교육용 프로토타입입니다.")
